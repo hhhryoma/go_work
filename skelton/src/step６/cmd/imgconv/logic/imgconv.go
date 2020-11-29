@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
+
+	// "image/draw"
 	"strconv"
 	"strings"
+	"unicode"
+
+	"golang.org/x/image/draw"
 )
 
 var (
@@ -33,31 +37,25 @@ func parseRelSize(base int, s string) (int, error) {
 		// TODO: cが数字の場合はfalse、そうでない場合はtrueを返す。
 		// なお、iにはここがtrueになった箇所（インデックス）が入る。
 		// ヒント：unicodeパッケージのドキュメントを見てみよう。
-		if c >= rune('0') && c <= rune('9') {
-			return false
-		} else {
-			return true
-		}
+		return !unicode.IsNumber(c)
 	})
 
 	// TODO: 数字のみだった場合は、単位なしの数値のみとし、
 	// sをint型に変換して返す。
 	// ヒント：stringsパッケージのドキュメントを見て、strings.IndexFuncの戻り値を調べよう。
-	sInt := 0
-	var err error
 	if i == -1 {
-		sInt, err = strconv.Atoi(s)
-	} else {
-		// TODO:sのうち、数字だけの部分をint型に変換する。
-		sInt, err = strconv.Atoi(s[:i])
+		return strconv.Atoi(s)
 	}
+	// TODO:sのうち、数字だけの部分をint型に変換する。
+	sInt, err := strconv.Atoi(s[:i])
+
 	if err != nil {
 		return 0, ErrInvalidSize
 	}
 	switch s[i:] {
 	// TODO: "%"が指定された場合は、baseを100%として値を計算する。
 	case "%":
-		return base * (sInt / 100), nil
+		return int(float64(base) * (float64(sInt) / 100)), nil
 	case "px":
 		return sInt, nil
 	default:
@@ -92,9 +90,6 @@ func (img *Image) parseSize(s string) (sz image.Point, err error) {
 	} else {
 		// そうでない場合は、"x"で分割した2番目の方をパースして高さとする。
 		sz.Y, err = parseRelSize(img.Bounds().Max.Y, sp[1])
-		if err != nil {
-			return
-		}
 	}
 	return
 }
@@ -126,11 +121,6 @@ func (img *Image) parseBounds(s string) (r image.Rectangle, err error) {
 	// TODO: Y座標が指定されている場合はパースし、そうでない場合は0とする
 	if len(sp) == 3 {
 		p.Y, err = parseRelSize(img.Bounds().Max.X, sp[2])
-		if err != nil {
-			return
-		}
-	} else {
-		p.Y = 0
 	}
 	// TODO: 開始座標分だけrを並行移動させる。
 	r = r.Add(p)
@@ -183,5 +173,26 @@ func (img *Image) Clip(s string) error {
 
 	// TODO: imgに埋め込まれているimage.Imageをdstで更新する。
 	img.Image = dst
+	return nil
+}
+
+// Resize は、画像のリサイズを行う。
+// "10x20"のように、幅x高さを指定する。
+// "10%X10%"のように、単位も指定できる。
+// 使用できる単位は、"px"と"%"である。
+// "%"を指定すると、元の画像の幅や高さを基準とする。
+// 高さを省略すると、幅と同じになる。
+func (img *Image) Resize(s string) error {
+	sz, err := img.parseSize(s)
+	if err != nil {
+		return err
+	}
+
+	dst := newDrawImage(image.Rectangle{image.ZP, sz}, img.ColorModel())
+	// TODO: draw.NearestNeighbor.Scaleを使って画像を縮小する。
+	// なお、第6引数の*draw.Optionsはnilで構わない。
+	draw.NearestNeighbor.Scale(dst, dst.Bounds(), img, img.Bounds(), draw.Src, nil)
+	img.Image = dst
+
 	return nil
 }
